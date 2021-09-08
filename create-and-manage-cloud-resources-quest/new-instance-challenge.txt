@@ -1,0 +1,3 @@
+gcloud compute instances create "nucleus-jumphost" \
+--machine-type "f1-micro" \
+--subnet "default"
