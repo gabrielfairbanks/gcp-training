@@ -1,46 +1,40 @@
 gcloud config set compute/zone us-east1-b
 gcloud config set compute/region us-east1
 
+#Creates startup file
+cat << EOF > startup.sh
+#! /bin/bash
+apt-get update
+apt-get install -y nginx
+service nginx start
+sed -i -- 's/nginx/Google Cloud Platform - '"\$HOSTNAME"'/' /var/www/html/index.nginx-debian.html
+EOF
+
 # Create an instance template.
 gcloud compute instance-templates create nucleus-lb-backend-template \
    --region=us-east1 \
    --network=default \
    --subnet=default \
-   --tags=allow-health-check \
    --image-family=debian-9 \
    --image-project=debian-cloud \
-   --metadata=startup-script="cat << EOF > startup.sh
-#! /bin/bash
-apt-get update
-apt-get install -y nginx
-service nginx start
-sed -i -- 's/nginx/Google Cloud Platform - '\"\$HOSTNAME\"'/' /var/www/html/index.nginx-debian.html
-EOF
-chmod +x startup.sh
-./startup.sh"
+   --metadata-from-file startup-script=startup.sh
 
+# Create a target pool
 gcloud compute target-pools create nucleus-www-pool \
     --region us-east1
 
-# Creating a managed instance group based on the template
+# Create a managed instance group.
 gcloud compute instance-groups managed create nucleus-lb-backend-group \
-   --template=nucleus-lb-backend-template --size=2 --target-pool nucleus-www-pool
+   --template=nucleus-lb-backend-template \
+   --size=2 \
+   --target-pool nucleus-www-pool
 
-# Creating firewall rule to allow google healthcheck to see the instances
-gcloud compute firewall-rules create nucleus-fw-allow-health-check \
+# Create a firewall rule to allow traffic (80/tcp).
+gcloud compute firewall-rules create nucleus-www-firewall \
     --network=default \
-    --action=allow \
-    --direction=ingress \
-    --source-ranges=130.211.0.0/22,35.191.0.0/16 \
-    --target-tags=allow-health-check \
-    --rules=tcp:80
+    --allow tcp:80
 
-# Creating a static external ip address
-gcloud compute addresses create nucleus-lb-ipv4-1 \
-    --ip-version=IPV4 \
-    --global
-
-# Creating a healthcheck for the load balancer
+# Create a health check.
 gcloud compute health-checks create http nucleus-http-basic-check \
         --port 80
 
@@ -67,7 +61,6 @@ gcloud compute target-http-proxies create nucleus-http-lb-proxy \
 
 # Creating a fowarding rule
 gcloud compute forwarding-rules create nucleus-http-content-rule \
-        --address=nucleus-lb-ipv4-1\
         --global \
         --target-http-proxy=nucleus-http-lb-proxy \
         --ports=80
