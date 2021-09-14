@@ -18,8 +18,8 @@ gcloud pubsub topics create $KRAKEN_TOPIC
 #
 # Task 3: Create the thumbnail Cloud Function
 #################################################
-mkdir /home/thumbnail-cf
-cd /home/thumbnail-cf
+mkdir thumbnail-cf
+cd ~/thumbnail-cf
 
 cat << EOF > index.js
 /* globals exports, require */
@@ -110,4 +110,11 @@ cat << EOF > package.json
   }
 }
 EOF
+
+# Deploy the cloud function
+gcloud functions deploy thumbnail \
+  --entry-point thumbnail \
+  --stage-bucket $KRAKEN_BUCKET \
+  --trigger-bucket $KRAKEN_BUCKET \
+  --runtime nodejs14
 
