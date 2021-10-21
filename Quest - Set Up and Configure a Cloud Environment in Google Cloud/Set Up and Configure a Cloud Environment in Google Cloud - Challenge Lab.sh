@@ -14,7 +14,9 @@ gcloud compute networks subnets create griffin-prod-mgmt --range=192.168.64.0/20
 # Task 3: Create bastion host
 gcloud compute instances create bastion \
      --machine-type=f1-micro \
-     --tags=bastion
+     --tags=bastion \
+     --network-interface subnet=griffin-dev-mgmt \
+     --network-interface subnet=griffin-prod-mgmt
 
 gcloud compute firewall-rules create allow-bastion-dev-ssh --network griffin-dev-vpc --allow tcp:22 --source-ranges=192.168.32.0/20
 gcloud compute firewall-rules create allow-bastion-prod-ssh --network griffin-prod-vpc --allow tcp:22 --source-ranges=192.168.64.0/20
@@ -30,3 +32,25 @@ gcloud sql connect griffin-dev-db --user=root
 CREATE DATABASE wordpress;
 GRANT ALL PRIVILEGES ON wordpress.* TO "wp_user"@"%" IDENTIFIED BY "stormwind_rules";
 FLUSH PRIVILEGES;
+
+# Task 5: Create Kubernetes cluster
+gcloud beta container clusters create griffin-dev \
+    --num-nodes=2 \
+    --network=griffin-dev-vpc \
+    --subnetwork=griffin-dev-wp \
+    --zone=us-east1-b
+
+# Task 6: Prepare the Kubernetes cluster
+gsutil -m cp -r gs://cloud-training/gsp321/wp-k8s .
+
+kubectl create -f wp-k8s/wp-env.yaml
+
+gcloud iam service-accounts keys create key.json \
+    --iam-account=cloud-sql-proxy@$GOOGLE_CLOUD_PROJECT.iam.gserviceaccount.com
+kubectl create secret generic cloudsql-instance-credentials \
+    --from-file key.json
+
+# Task 7: Create a WordPress deployment
+kubectl create -f wp-k8s/wp-deployment.yaml
+kubectl apply -f wp-k8s/wp-deployment.yaml
+kubectl create -f wp-k8s/wp-service.yaml
